@@ -26,6 +26,10 @@ def discover_test_files(repo_path="."):
         if any(part in ignored_dirs for part in path.parts):
             continue
 
+        # Ignore Ripple's internal source package
+        if "ripple" in path.relative_to(root).parts:
+            continue
+
         if (
             path.name.startswith("test_")
             or path.name.endswith("_test.py")

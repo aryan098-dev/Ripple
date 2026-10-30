@@ -12,6 +12,7 @@ from ripple.test_recommender import (
     discover_test_files,
     recommend_tests,
 )
+from ripple.test_runner import run_tests
 
 
 def run_ripple(repo_path="."):
@@ -125,6 +126,31 @@ def run_ripple(repo_path="."):
     if not recommendations:
         print("  No matching tests found.")
 
+
+    # Step 6: Execute recommended tests
+    print("\n[6] Executing recommended tests...")
+
+    recommended_files = [
+        item["test_file"]
+        for item in recommendations
+    ]
+
+    test_results = run_tests(
+        recommended_files,
+        root,
+    )
+
+    print("\nTest Execution Results")
+    print("-" * 35)
+    print("Passed:", test_results["passed"])
+    print("Failed:", test_results["failed"])
+    print("Execution successful:", test_results["success"])
+
+    if test_results["output"]:
+        print("\nTest output:")
+        print(test_results["output"])
+
+
     # Final summary
     print("\n" + "=" * 50)
     print("             RIPPLE REPORT")
@@ -141,6 +167,8 @@ def run_ripple(repo_path="."):
 
     print("\nRipple analysis completed.")
     print("=" * 50)
+    print("Tests passed:", test_results["passed"])
+    print("Tests failed:", test_results["failed"])
 
 
 if __name__ == "__main__":
