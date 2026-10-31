@@ -4,15 +4,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "test": "vitest run"
+},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aryan098-dev/Ripple.git"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/aryan098-dev/Ripple/issues"

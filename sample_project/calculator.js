@@ -1,3 +1,10 @@
 export function calculateTotal(items) {
-    return items.reduce((total, item) => total + item.price, 0);
+    if (!Array.isArray(items)) {
+        throw new TypeError("Items must be an array");
+    }
+
+    return items.reduce(
+        (total, item) => total + item.price,
+        0
+    );
 }

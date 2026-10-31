@@ -21,27 +21,8 @@ def run_ripple(repo_path="."):
     root = Path(repo_path).resolve()
     registry = create_default_registry()
 
-    print("\n" + "=" * 50)
-    print("          RIPPLE INTELLIGENCE ENGINE")
-    print("=" * 50)
-
-    # Step 1: Detect changed files
-    print("\n[1] Detecting changed files...")
-
+    # Step 1: Detect changes
     changes = get_changed_files(root)
-
-    for change in changes:
-        print(
-            f"  {change['change_type'].upper():10}"
-            f" {change['file']}"
-        )
-
-    if not changes:
-        print("  No changes detected.")
-        return
-
-    # Step 2: Analyze changed files
-    print("\n[2] Analyzing changed source files...")
 
     changed_modules = []
     analysis_results = []
@@ -54,65 +35,31 @@ def run_ripple(repo_path="."):
             continue
 
         module_name = get_file_module_id(
-            file_path,
-            root,
-            adapter,
+            file_path, root, adapter
         )
-
         changed_modules.append(module_name)
 
         if not file_path.is_file():
-            print(f"  Deleted or unavailable: {change['file']}")
             continue
 
         symbols = adapter.extract_symbols(file_path)
 
-        if not symbols:
-            print(f"  Analysis unavailable: {change['file']}")
-            continue
-
-        analysis_results.append({
-            "file": change["file"],
-            "language": adapter.__class__.__name__,
-            "symbols": symbols,
-        })
-
-        print(
-            f"  Analyzed: {change['file']} "
-            f"({adapter.__class__.__name__})"
-        )
+        if symbols:
+            analysis_results.append({
+                "file": change["file"],
+                "language": adapter.__class__.__name__,
+                "symbols": symbols,
+            })
 
     changed_modules = sorted(set(changed_modules))
 
-    # Step 3: Build dependency graph
-    print("\n[3] Building unified dependency graph...")
-
+    # Step 2: Build dependency graph
     graph = build_dependency_graph(root)
 
-    print("  Modules discovered:", len(graph))
-    print(
-        "  Dependency relationships:",
-        sum(len(dependents) for dependents in graph.values())
-    )
-
-    # Step 4: Analyze impact
-    print("\n[4] Calculating change impact...")
-
+    # Step 3: Analyze impact
     impacted = analyze_impact(graph, changed_modules)
 
-    if impacted:
-        for module, details in sorted(impacted.items()):
-            print(
-                f"  {module} | "
-                f"{details['impact_type']} | "
-                f"Level {details['depth']}"
-            )
-    else:
-        print("  No additional impacted modules detected.")
-
-    # Step 5: Recommend tests
-    print("\n[5] Generating test recommendations...")
-
+    # Step 4: Discover and recommend tests
     test_files = discover_test_files(root)
 
     analysis_targets = {
@@ -131,17 +78,7 @@ def run_ripple(repo_path="."):
         root,
     )
 
-    for recommendation in recommendations:
-        print("\n  Recommended:", recommendation["test_file"])
-        print("  Matches:", recommendation["matched_modules"])
-        print("  Reason:", recommendation["reason"])
-
-    if not recommendations:
-        print("  No matching tests found.")
-
-    # Step 6: Execute multi-language tests
-    print("\n[6] Executing recommended tests...")
-
+    # Step 5: Execute recommended tests
     recommended_files = [
         item["test_file"]
         for item in recommendations
@@ -149,36 +86,39 @@ def run_ripple(repo_path="."):
 
     test_results = run_tests(recommended_files, root)
 
-    print("\nMulti-language Test Results")
-    print("-" * 35)
-    print("Passed:", test_results["passed"])
-    print("Failed:", test_results["failed"])
-    print("Execution successful:", test_results["success"])
-
-    if test_results["output"]:
-        print("\nTest output:")
-        print(test_results["output"])
-
-    # Final report
-    print("\n" + "=" * 50)
-    print("             RIPPLE REPORT")
-    print("=" * 50)
-
-    print("Changed source modules:", len(changed_modules))
-    print("Successfully analyzed files:", len(analysis_results))
-    print("Dependency relationships:", sum(
-        len(dependents) for dependents in graph.values()
-    ))
-    print("Impacted modules:", len(impacted))
-    print("Test files discovered:", len(test_files))
-    print("Test recommendations:", len(recommendations))
-    print("Tests passed:", test_results["passed"])
-    print("Tests failed:", test_results["failed"])
-    print("Test execution successful:", test_results["success"])
-
-    print("\nRipple analysis completed.")
-    print("=" * 50)
+    # Step 6: Return structured results
+    return {
+        "changed_files": changes,
+        "changed_modules": changed_modules,
+        "analysis_results": analysis_results,
+        "dependency_graph": graph,
+        "impacted_modules": impacted,
+        "test_files_discovered": [
+            str(path.relative_to(root))
+            for path in test_files
+        ],
+        "recommendations": recommendations,
+        "test_results": test_results,
+        "summary": {
+            "changed_modules": len(changed_modules),
+            "analyzed_files": len(analysis_results),
+            "dependency_relationships": sum(
+                len(dependents)
+                for dependents in graph.values()
+            ),
+            "impacted_modules": len(impacted),
+            "tests_discovered": len(test_files),
+            "tests_recommended": len(recommendations),
+            "tests_passed": test_results["passed"],
+            "tests_failed": test_results["failed"],
+            "execution_successful": test_results["success"],
+        },
+    }
 
 
 if __name__ == "__main__":
-    run_ripple()
+    import json
+
+    results = run_ripple()
+
+    print(json.dumps(results["summary"], indent=4))

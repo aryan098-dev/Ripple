@@ -1,5 +1,5 @@
 
-from payment import process_payment
+from sample_project.payment import process_payment
 
 
 def complete_checkout(amount):

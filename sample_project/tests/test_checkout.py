@@ -1,5 +1,5 @@
 
-from checkout import complete_checkout
+from sample_project.checkout import complete_checkout
 
 
 def test_complete_checkout():
