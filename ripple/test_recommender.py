@@ -2,84 +2,142 @@
 from pathlib import Path
 
 
+IGNORED_DIRS = {
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "site-packages",
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+}
+
+
 def discover_test_files(repo_path="."):
-    """
-    Discover Python test files in a repository.
-    """
+    """Discover Python and JavaScript test files."""
 
     root = Path(repo_path).resolve()
-
-    ignored_dirs = {
-        ".git",
-        ".venv",
-        "venv",
-        "__pycache__",
-        "site-packages",
-    }
-
     test_files = []
 
-    for path in root.rglob("*.py"):
-        if path.resolve() == Path(__file__).resolve():
+    supported_extensions = {
+        ".py", ".js", ".jsx", ".mjs", ".cjs"
+    }
+
+    for path in root.rglob("*"):
+
+        if not path.is_file():
             continue
 
-        if any(part in ignored_dirs for part in path.parts):
+        relative_parts = path.relative_to(root).parts
+
+        if any(part in IGNORED_DIRS for part in relative_parts):
             continue
 
-        # Ignore Ripple's internal source package
-        if "ripple" in path.relative_to(root).parts:
+        if "ripple" in relative_parts:
             continue
+
+        if path.suffix.lower() not in supported_extensions:
+            continue
+
+        name = path.name.lower()
+
+        is_python_test = (
+            name.startswith("test_")
+            or name.endswith("_test.py")
+        ) and path.suffix.lower() == ".py"
+
+        is_javascript_test = (
+            ".test." in name
+            or ".spec." in name
+        ) and path.suffix.lower() in {
+            ".js", ".jsx", ".mjs", ".cjs"
+        }
+
+        is_inside_tests_directory = (
+            "tests" in relative_parts
+            or "__tests__" in relative_parts
+        )
 
         if (
-            path.name.startswith("test_")
-            or path.name.endswith("_test.py")
-            or "tests" in path.parts
+            is_python_test
+            or is_javascript_test
+            or is_inside_tests_directory
         ):
             test_files.append(path)
 
-    return sorted(test_files)
+    return sorted(set(test_files))
 
+
+def get_module_name(module_id):
+    """Extract the source filename stem from a module identifier."""
+
+    module_id = module_id.lower()
+
+    # Remove language prefix from identifiers such as
+    # javascript:sample_project.app
+    if ":" in module_id:
+        module_id = module_id.split(":", 1)[1]
+
+    return module_id.split(".")[-1]
+
+
+def get_test_target(test_file):
+    """Extract the production module name targeted by a test."""
+
+    name = test_file.name.lower()
+
+    if test_file.suffix.lower() == ".py":
+
+        test_name = test_file.stem
+
+        if test_name.startswith("test_"):
+            return test_name[5:]
+
+        if test_name.endswith("_test"):
+            return test_name[:-5]
+
+    else:
+        for marker in (".test.", ".spec."):
+            if marker in name:
+                return name.split(marker, 1)[0]
+
+    return None
 
 
 def recommend_tests(impacted_modules, test_files, repo_path="."):
     """
-    Recommend tests for impacted production modules.
+    Recommend tests matching changed or impacted modules.
 
-    Matches test filenames with production module names.
-    Test modules are excluded from impact targets.
+    Supports Python and JavaScript test naming conventions.
     """
 
     root = Path(repo_path).resolve()
-
     recommendations = []
 
     for test_file in test_files:
 
         relative_path = test_file.relative_to(root)
-        test_name = test_file.stem.lower()
+        target_name = get_test_target(test_file)
 
-        # Normalize test filename
-        if test_name.startswith("test_"):
-            target_name = test_name[5:]
-
-        elif test_name.endswith("_test"):
-            target_name = test_name[:-5]
-
-        else:
-            target_name = test_name
+        if not target_name:
+            continue
 
         matched_modules = []
 
         for module, details in impacted_modules.items():
 
-            parts = module.lower().split(".")
-            module_name = parts[-1]
+            module_name = get_module_name(module)
 
-            # Ignore test modules and test directories
+            parts = module.lower().replace(":", ".").split(".")
+
             if (
                 "tests" in parts
+                or "__tests__" in parts
                 or module_name.startswith("test_")
-                or module_name.endswith("_test")
+                or ".test." in module
+                or ".spec." in module
             ):
                 continue
 
@@ -100,41 +158,15 @@ def recommend_tests(impacted_modules, test_files, repo_path="."):
     return recommendations
 
 
-
 if __name__ == "__main__":
-
-    sample_impact = {
-    "sample_project.checkout": {
-        "depth": 1,
-        "impact_type": "direct",
-    },
-    "sample_project.main": {
-        "depth": 2,
-        "impact_type": "indirect",
-    },
-    "sample_project.tests.test_checkout": {
-        "depth": 1,
-        "impact_type": "direct",
-    },
-}
 
     tests = discover_test_files()
 
-    results = recommend_tests(
-        sample_impact,
-        tests,
-    )
-
-    print("\nRipple - Test Recommendation Engine")
+    print("\nRipple - Multi-Language Test Recommender")
     print("-" * 45)
 
     print("Test files discovered:", len(tests))
 
-    for recommendation in results:
+    for test_file in tests:
+        print(test_file)
 
-        print("\nRecommended test:")
-        print("File:", recommendation["test_file"])
-        print("Affected modules:", recommendation["matched_modules"])
-        print("Reason:", recommendation["reason"])
-
-    print("\nTotal recommendations:", len(results))

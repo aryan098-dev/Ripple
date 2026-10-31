@@ -2,10 +2,10 @@
 from pathlib import Path
 
 from ripple.git_diff import get_changed_files
-from ripple.ast_analyzer import analyze_python_file
+from ripple.adapters.registry import create_default_registry
 from ripple.dependency_graph import (
     build_dependency_graph,
-    get_module_name,
+    get_file_module_id,
 )
 from ripple.impact_analyzer import analyze_impact
 from ripple.test_recommender import (
@@ -16,9 +16,10 @@ from ripple.test_runner import run_tests
 
 
 def run_ripple(repo_path="."):
-    """Run the complete Ripple analysis pipeline."""
+    """Run Ripple's multi-language analysis pipeline."""
 
     root = Path(repo_path).resolve()
+    registry = create_default_registry()
 
     print("\n" + "=" * 50)
     print("          RIPPLE INTELLIGENCE ENGINE")
@@ -39,51 +40,65 @@ def run_ripple(repo_path="."):
         print("  No changes detected.")
         return
 
-    # Step 2: Analyze changed Python files
-    print("\n[2] Analyzing changed Python files...")
+    # Step 2: Analyze changed files
+    print("\n[2] Analyzing changed source files...")
 
     changed_modules = []
     analysis_results = []
 
     for change in changes:
-
-        if not change["file"].endswith(".py"):
-            continue
-
         file_path = root / change["file"]
+        adapter = registry.get_adapter(file_path)
 
-        if not file_path.is_file():
-            print(f"  Skipping unavailable file: {change['file']}")
+        if adapter is None:
             continue
 
-        module_name = get_module_name(file_path, root)
+        module_name = get_file_module_id(
+            file_path,
+            root,
+            adapter,
+        )
 
         changed_modules.append(module_name)
 
-        result = analyze_python_file(file_path)
+        if not file_path.is_file():
+            print(f"  Deleted or unavailable: {change['file']}")
+            continue
 
-        if "error" in result:
-            print(f"  Analysis error: {change['file']}")
-        else:
-            analysis_results.append(result)
-            print(f"  Analyzed: {change['file']}")
+        symbols = adapter.extract_symbols(file_path)
+
+        if not symbols:
+            print(f"  Analysis unavailable: {change['file']}")
+            continue
+
+        analysis_results.append({
+            "file": change["file"],
+            "language": adapter.__class__.__name__,
+            "symbols": symbols,
+        })
+
+        print(
+            f"  Analyzed: {change['file']} "
+            f"({adapter.__class__.__name__})"
+        )
 
     changed_modules = sorted(set(changed_modules))
 
     # Step 3: Build dependency graph
-    print("\n[3] Building dependency graph...")
+    print("\n[3] Building unified dependency graph...")
 
     graph = build_dependency_graph(root)
 
     print("  Modules discovered:", len(graph))
+    print(
+        "  Dependency relationships:",
+        sum(len(dependents) for dependents in graph.values())
+    )
 
-    # Step 4: Analyze change impact
+    # Step 4: Analyze impact
     print("\n[4] Calculating change impact...")
 
-    impacted = analyze_impact(
-        graph,
-        changed_modules,
-    )
+    impacted = analyze_impact(graph, changed_modules)
 
     if impacted:
         for module, details in sorted(impacted.items()):
@@ -100,8 +115,6 @@ def run_ripple(repo_path="."):
 
     test_files = discover_test_files(root)
 
-    # Include changed modules and their dependents
-    # so tests can also be suggested for directly changed code.
     analysis_targets = {
         module: {
             "depth": 0,
@@ -126,8 +139,7 @@ def run_ripple(repo_path="."):
     if not recommendations:
         print("  No matching tests found.")
 
-
-    # Step 6: Execute recommended tests
+    # Step 6: Execute multi-language tests
     print("\n[6] Executing recommended tests...")
 
     recommended_files = [
@@ -135,12 +147,9 @@ def run_ripple(repo_path="."):
         for item in recommendations
     ]
 
-    test_results = run_tests(
-        recommended_files,
-        root,
-    )
+    test_results = run_tests(recommended_files, root)
 
-    print("\nTest Execution Results")
+    print("\nMulti-language Test Results")
     print("-" * 35)
     print("Passed:", test_results["passed"])
     print("Failed:", test_results["failed"])
@@ -150,13 +159,12 @@ def run_ripple(repo_path="."):
         print("\nTest output:")
         print(test_results["output"])
 
-
-    # Final summary
+    # Final report
     print("\n" + "=" * 50)
     print("             RIPPLE REPORT")
     print("=" * 50)
 
-    print("Changed Python modules:", len(changed_modules))
+    print("Changed source modules:", len(changed_modules))
     print("Successfully analyzed files:", len(analysis_results))
     print("Dependency relationships:", sum(
         len(dependents) for dependents in graph.values()
@@ -164,11 +172,12 @@ def run_ripple(repo_path="."):
     print("Impacted modules:", len(impacted))
     print("Test files discovered:", len(test_files))
     print("Test recommendations:", len(recommendations))
+    print("Tests passed:", test_results["passed"])
+    print("Tests failed:", test_results["failed"])
+    print("Test execution successful:", test_results["success"])
 
     print("\nRipple analysis completed.")
     print("=" * 50)
-    print("Tests passed:", test_results["passed"])
-    print("Tests failed:", test_results["failed"])
 
 
 if __name__ == "__main__":
