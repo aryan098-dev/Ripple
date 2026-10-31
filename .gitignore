@@ -24,3 +24,6 @@ node_modules/
 .DS_Store
 .vercel
 .env*
+
+# Vite production build
+dist/
